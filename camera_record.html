@@ -1,170 +1,268 @@
 <!DOCTYPE html>
 <html>
-    <head>
-        <meta charset="UTF-8">
-        <title>Camera Record</title>
-    </head>
+  <head>
+    <meta charset="UTF-8" />
+    <title>Camera Record</title>
+  </head>
 
-    <body>
-        <canvas id="canvas" width="640" height="360"></canvas>
-        <video id="video" autoplay loop muted></video>
-        <button id="button-start">开始录制</button>
-        <button id="button-stop">结束录制</button>
-    </body>
+  <body>
+    <canvas id="canvas" width="640" height="360"></canvas>
+    <video id="video" autoplay loop muted></video>
+    <button id="button-start">开始录制</button>
+    <button id="button-stop">结束录制</button>
+  </body>
 
-    <style>
-        * {
-            margin: 20px;
-            font-size: 0px;
-            box-sizing: border-box;
+  <style>
+    * {
+      margin: 20px;
+      font-size: 0px;
+      box-sizing: border-box;
+    }
+
+    #canvas {
+      display: none;
+    }
+
+    #video {
+      width: 640px;
+      height: 360px;
+      background: deepskyblue;
+      display: block;
+      border-radius: 2px;
+      box-shadow: 0 1px 1.5px 1px rgba(0, 0, 0, 0.12);
+    }
+
+    #button-start {
+      width: 300px;
+      height: 75px;
+      box-sizing: border-box;
+      background: linear-gradient(#ff000011, #ff000044) orange;
+      color: white;
+      font-size: 16px;
+      font-family: "monospace";
+      border: none;
+      outline: none;
+      border-radius: 2px;
+      box-shadow: 0 1px 1.5px 1px rgba(0, 0, 0, 0.12);
+      user-select: none;
+    }
+
+    #button-start:hover {
+      background: linear-gradient(#ff000033, #ff000077) orange;
+    }
+
+    #button-start:active {
+      background: linear-gradient(#ff000055, #ff000099) orange;
+    }
+
+    #button-start[disabled] {
+      background: gray;
+    }
+
+    #button-stop {
+      width: 300px;
+      height: 75px;
+      box-sizing: border-box;
+      background: linear-gradient(#9933ff00, #9933ff33) dodgerblue;
+      color: white;
+      font-size: 16px;
+      font-family: "monospace";
+      border: none;
+      outline: none;
+      border-radius: 2px;
+      box-shadow: 0 1px 1.5px 1px rgba(0, 0, 0, 0.12);
+      user-select: none;
+    }
+
+    #button-stop:hover {
+      background: linear-gradient(#9933ff22, #9933ff66) dodgerblue;
+    }
+
+    #button-stop:active {
+      background: linear-gradient(#9933ff44, #9933ff88) dodgerblue;
+    }
+
+    #button-stop[disabled] {
+      background: gray;
+    }
+  </style>
+
+  <script>
+    /*
+        记录一个流的过程是非常容易的:
+
+        建立一个 MediaStream或者HTMLMediaElement (以 <audio> 或 <video> 元素的形式) 来充当媒体数据的源.
+        创建一个 MediaRecorder 对象, 指定源以及任何有需求的的选项 (比如容器的 MIME 类型或它轨道所需的比特率).
+        给 dataavailable 事件设置MediaRecorder.ondataavailable 事件处理函数; 会在数据可利用时候调用.
+        一旦媒体源播放，你已经准备好录制，使用 MediaRecorder.start() (en-US) 开始录制.
+        dataavailable 事件处理函数正如你所愿的在每次数据准备好时调用; 这个事件有一个值为包含媒体数据的Blob 类型的 data 属性. 你可以强制 dataavailable 事件发生, 因此会给你传递最新的声音以至于可以让你过滤、保存或者做一些其他的事情。
+        当源媒体停止播放时候，录制自动结束.
+        你可以随时结束录制通过使用 MediaRecorder.stop() (en-US).
+    */
+    let canvasElement = document.querySelector("#canvas");
+    let videoElement = document.querySelector("#video");
+    let startButton = document.querySelector("#button-start");
+    let stopButton = document.querySelector("#button-stop");
+
+    const videoWidth = 640;
+    const videoHeight = 360;
+    const frameRate = 60;
+    const encodeType = "video/webm;codecs=vp8";
+
+    let chunks = [];
+
+    let frameId = null;
+
+    //设置画布背景
+    const canvasContext = canvasElement.getContext("2d");
+    canvasContext.fillStyle = "deepskyblue";
+    canvasContext.fillRect(0, 0, canvasElement.width, canvasElement.height);
+
+    //创建MediaRecorder，设置媒体参数
+    const stream = canvasElement.captureStream(frameRate);
+    const recorder = new MediaRecorder(stream, {
+      mimeType: encodeType,
+    });
+
+    //收集录制数据
+    recorder.ondataavailable = (e) => {
+      chunks.push(e.data);
+    };
+
+    //按钮事件
+    startButton.disabled = true;
+    stopButton.disabled = true;
+    startButton.onclick = (e) => {
+      startButton.disabled = true;
+      stopButton.disabled = false;
+      recorder.start(10);
+      drawFrame();
+    };
+    stopButton.onclick = (e) => {
+      startButton.disabled = false;
+      stopButton.disabled = true;
+      recorder.stop();
+      cancelAnimationFrame(frameId);
+      download();
+    };
+
+    //打开摄像头，并将数据显示到video标签上
+    navigator.mediaDevices
+      .getUserMedia({
+        audio: false,
+        video: true,
+      })
+      .then((mediaStream) => {
+        videoElement.srcObject = mediaStream;
+        videoElement.play();
+        startButton.disabled = false;
+      })
+      .catch((error) => {
+        alert("打开摄像头失败");
+      });
+
+    //播放视频
+    function drawFrame() {
+      canvasContext.drawImage(videoElement, 0, 0, videoWidth, videoHeight);
+      frameId = requestAnimationFrame(drawFrame);
+    }
+
+    //下载录制内容
+    function download() {
+      let blob = new Blob(chunks);
+
+      var formData = new FormData();
+      formData.append("file", blob);
+      ajax("POST", "http://114.132.239.118:3003/addpic", formData, function () {
+        alert("上传成功");
+      });
+
+      // let url = window.URL.createObjectURL(blob);
+      // let link = document.createElement("a");
+      // link.href = url;
+      // link.download = new Date().getTime() + ".mp4";
+      // link.style.display = "none";
+      // document.body.appendChild(link);
+      // link.click();
+      // link.remove();
+    }
+
+    /*
+     * ajax
+     * @param method(必选)    请求类型  get，post和formData
+     * @param url(必选)       请求的url地址   相同域名下的页面（此函数不支持跨域请求）
+     * @param data(必选)      请求协带的数据  以js对象的形式定义，如：{name:'张三'}
+     * @param callback(必选)  回调函数,可接收一个参数，这个参数就是服务器响应的数据
+     * @param type(可选)      指定服务器响应的数据类型（可选值：json,xml,text），如果是json模式，则使用json解析数据，默认为text普通字符串
+     */
+    var ajax = function (method, url, data, callback, type) {
+      //创建兼容 XMLHttpRequest 对象
+      var xhr;
+      if (window.XMLHttpRequest) {
+        //IE7+, Firefox, Chrome, Opera, Safari
+        xhr = new XMLHttpRequest();
+      } else {
+        // code for IE6, IE5
+        xhr = new ActiveXObject("Microsoft.XMLHTTP");
+      }
+      //给请求添加状态变化事件处理函数
+      xhr.onreadystatechange = function () {
+        //判断状态码
+        if (xhr.status == 200 && xhr.readyState == 4) {
+          //根据type参数，判断返回的内容需要进行怎样的处理
+          if (type == "json") {
+            //获得 json 形式的响应数据，并使用parse方法解析
+            var res = JSON.parse(xhr.responseText);
+          } else if (type == "xml") {
+            //获得 XML 形式的响应数据
+            var res = responseXML;
+          } else {
+            //获得字符串形式的响应数据
+            var res = xhr.responseText;
+          }
+          //调用回调函数,并将响应数据传入回调函数
+          callback(res);
         }
-
-        #canvas {
-            display: none;
+      };
+      //判断是否为表单提交
+      if (method != "formData") {
+        //判断data是否有数据
+        var param = "";
+        //这里使用stringify方法将js对象格式化为json字符串
+        if (JSON.stringify(data) != "{}") {
+          url += "?";
+          for (var i in data) {
+            param += i + "=" + data[i] + "&"; //将js对象重组，拼接成url参数存入param变量中
+          }
+          //使用slice函数提取一部分字符串，这里主要是为了去除拼接的最后一个&字符
+          //slice函数：返回一个新的字符串。包括字符串从 start 开始（包括 start）到 end 结束（不包括 end）为止的所有字符。
+          param = param.slice(0, param.length - 1);
         }
-
-        #video {
-            width: 640px;
-            height: 360px;
-            background: deepskyblue;
-            display: block;
-            border-radius: 2px;
-            box-shadow: 0 1px 1.5px 1px rgba(0, 0, 0, 0.12);
+        //判断method是否为get
+        if (method == "get") {
+          //是则将数据拼接在url后面
+          url = url + param;
         }
-
-        #button-start {
-            width: 300px;
-            height: 75px;
-            box-sizing: border-box;
-            background: linear-gradient(#FF000011, #FF000044) orange;
-            color: white;
-            font-size: 16px;
-            font-family: "monospace";
-            border: none;
-            outline: none;
-            border-radius: 2px;
-            box-shadow: 0 1px 1.5px 1px rgba(0, 0, 0, 0.12);
-            user-select: none;
-        }
-
-        #button-start:hover {
-            background: linear-gradient(#FF000033, #FF000077) orange;
-        }
-
-        #button-start:active {
-            background: linear-gradient(#FF000055, #FF000099) orange;
-        }
-
-        #button-start[disabled] {
-            background: gray;
-        }
-
-        #button-stop {
-            width: 300px;
-            height: 75px;
-            box-sizing: border-box;
-            background: linear-gradient(#9933FF00, #9933FF33) dodgerblue;
-            color: white;
-            font-size: 16px;
-            font-family: "monospace";
-            border: none;
-            outline: none;
-            border-radius: 2px;
-            box-shadow: 0 1px 1.5px 1px rgba(0, 0, 0, 0.12);
-            user-select: none;
-        }
-
-        #button-stop:hover {
-            background: linear-gradient(#9933FF22, #9933FF66) dodgerblue;
-        }
-
-        #button-stop:active {
-            background: linear-gradient(#9933FF44, #9933FF88) dodgerblue;
-        }
-
-        #button-stop[disabled] {
-            background: gray;
-        }
-    </style>
-
-    <script>
-
-        let canvasElement = document.querySelector("#canvas");
-        let videoElement = document.querySelector("#video");
-        let startButton = document.querySelector("#button-start");
-        let stopButton = document.querySelector("#button-stop");
-
-        const videoWidth = 640;
-        const videoHeight = 360;
-        const frameRate = 60;
-        const encodeType = "video/webm;codecs=vp8";
-
-        let chunks = [];
-
-        let frameId = null;
-
-        //设置画布背景
-        const canvasContext = canvasElement.getContext("2d");
-        canvasContext.fillStyle = "deepskyblue";
-        canvasContext.fillRect(0, 0, canvasElement.width, canvasElement.height);
-
-        //创建MediaRecorder，设置媒体参数
-        const stream = canvasElement.captureStream(frameRate);
-        const recorder = new MediaRecorder(stream, {
-            mimeType: encodeType
-        });
-
-        //收集录制数据
-        recorder.ondataavailable = e => {
-            chunks.push(e.data);
-        };
-
-        //按钮事件
-        startButton.disabled = true;
-        stopButton.disabled = true;
-        startButton.onclick = e => {
-            startButton.disabled = true;
-            stopButton.disabled = false;
-            recorder.start(10);
-            drawFrame();
-        };
-        stopButton.onclick = e => {
-            startButton.disabled = false;
-            stopButton.disabled = true;
-            recorder.stop();
-            cancelAnimationFrame(frameId);
-            download();
-        };
-
-        //打开摄像头，并将数据显示到video标签上
-        navigator.mediaDevices.getUserMedia({
-            audio: false,
-            video: true
-        }).then(mediaStream => {
-            videoElement.srcObject = mediaStream;
-            videoElement.play();
-            startButton.disabled = false;
-        }).catch(error => {
-            alert("打开摄像头失败");
-        });
-
-        //播放视频
-        function drawFrame() {
-            canvasContext.drawImage(videoElement, 0, 0, videoWidth, videoHeight);
-            frameId = requestAnimationFrame(drawFrame);
-        }
-
-        //下载录制内容
-        function download() {
-            let blob = new Blob(chunks);
-            let url = window.URL.createObjectURL(blob);
-            let link = document.createElement("a");
-            link.href = url;
-            link.download = new Date().getTime() + ".mp4";
-            link.style.display = "none";
-            document.body.appendChild(link);
-            link.click();
-            link.remove();
-        }
-    </script>
+        xhr.open(method, url, true);
+      } else {
+        //初始化请求
+        xhr.open("post", url, true);
+      }
+      //如果method == post
+      if (method == "post") {
+        xhr.setRequestHeader(
+          "Content-Type",
+          "application/x-www-form-urlencoded"
+        );
+        //发送请求
+        xhr.send(param);
+      } else if (method == "formData") {
+        //发送请求
+        xhr.send(data);
+      } else {
+        //发送请求
+        xhr.send(null);
+      }
+    };
+  </script>
 </html>
